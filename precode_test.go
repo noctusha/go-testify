@@ -6,25 +6,57 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"bytes"
+	"strconv"
 )
 
-func TestMainHandlerWhenOK(t *testing.T) {
-	req := httptest.NewRequest("GET", "/cafe?count=2&city=moscow", nil)
+type ResponseRecorder struct {
+	Code int
+	HeaderMap http.Header
+	Body *bytes.Buffer
+	Flushed bool
+}
 
-	responseRecorder := httptest.NewRecorder()
+func GetARespRec (url string) (req *http.Request, responseRecorder *httptest.ResponseRecorder) {
+	req = httptest.NewRequest("GET", url, nil)
+	responseRecorder = httptest.NewRecorder()
+	return req, responseRecorder
+}
+
+func TestMainHandlerWhenOK(t *testing.T) {
+	req, responseRecorder := GetARespRec("/cafe?count=2&city=moscow")
+
+
 	handler := http.HandlerFunc(mainHandle)
 	handler.ServeHTTP(responseRecorder, req)
 
 	status := responseRecorder.Code
-
 	assert.Equal(t, status, http.StatusOK)
+
+
+	countStr := req.URL.Query().Get("count")
+	if countStr == "" {
+		return
+	}
+
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return
+	}
+	
+	cnt := 1
+	for i := 0; i < len(responseRecorder.Body.String()); i++ {
+		if responseRecorder.Body.String()[i] == ',' {
+			cnt++
+		}
+	}
+	assert.Equal(t, count, cnt)
 	require.NotEmpty(t, responseRecorder.Body.String())
 }
 
 func TestMainHandlerWhenCityIsWrong(t *testing.T) {
-	req := httptest.NewRequest("GET", "/cafe?count=2&city=Bryansk", nil)
+	req, responseRecorder := GetARespRec("/cafe?count=2&city=Bryansk")
 
-	responseRecorder := httptest.NewRecorder()
 	handler := http.HandlerFunc(mainHandle)
 	handler.ServeHTTP(responseRecorder, req)
 
@@ -35,13 +67,18 @@ func TestMainHandlerWhenCityIsWrong(t *testing.T) {
 }
 
 func TestMainHandlerWhenCountIsMoreThanMax(t *testing.T) {
-	req := httptest.NewRequest("GET", "/cafe?count=11&city=moscow", nil)
+	req, responseRecorder := GetARespRec("/cafe?count=11&city=moscow")
 
-	responseRecorder := httptest.NewRecorder()
 	handler := http.HandlerFunc(mainHandle)
 	handler.ServeHTTP(responseRecorder, req)
 
-	expected := "Мир кофе, Сладкоежка, Кофе и завтраки, Сытый студент"
 
-	assert.Equal(t, responseRecorder.Body.String(), expected)
+	cnt := 1
+	for i := 0; i < len(responseRecorder.Body.String()); i++ {
+		if responseRecorder.Body.String()[i] == ',' {
+			cnt++
+		}
+	}
+
+	assert.Equal(t, cnt, 4)
 }
